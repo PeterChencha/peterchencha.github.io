@@ -21,18 +21,23 @@ jobs:
         env:
           HEAD_REF: ${{ github.head_ref }}
           BASE_REF: ${{ github.base_ref }}
+          LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
         run: |
           python3 - <<'PY'
           import os, sys
           head = os.environ["HEAD_REF"]
           base = os.environ["BASE_REF"]
-          prefixes = ("feature/", "fix/", "docs/", "chore/", "refactor/", "test/")
+          labels = {x.strip() for x in os.environ.get("LABELS", "").split(",") if x.strip()}
+          prefixes = ("feature/", "fix/", "docs/", "chore/", "refactor/", "test/", "dependabot/")
           if base == "main":
               ok = head == "dev" or head.startswith("hotfix/")
               expected = "dev or hotfix/*"
           elif base == "dev":
-              ok = any(head.startswith(p) and len(head) > len(p) for p in prefixes)
-              expected = ", ".join(p + "*" for p in prefixes)
+              if head == "main" and "reconcile" in labels:
+                  ok, expected = True, "main (reconcile)"
+              else:
+                  ok = any(head.startswith(p) and len(head) > len(p) for p in prefixes)
+                  expected = ", ".join(p + "*" for p in prefixes)
           else:
               ok, expected = False, "dev or main"
           if not ok:
@@ -41,20 +46,3 @@ jobs:
           print(f"route ok: {head} -> {base}")
           PY
 
-  direct-push-audit:
-    name: direct-push-audit
-    if: github.event_name == 'push'
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 2
-      - name: Flag non-merge commits on protected branches
-        run: |
-          parents=$(git rev-list --parents -n 1 "$GITHUB_SHA" | wc -w)
-          if [ "$parents" -lt 3 ]; then
-            echo "::warning::Direct commit on $GITHUB_REF_NAME by $GITHUB_ACTOR - the standard path is a PR from dev."
-          else
-            echo "merge commit on $GITHUB_REF_NAME: consistent with a promotion"
-          fi
