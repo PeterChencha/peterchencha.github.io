@@ -1,0 +1,11 @@
+version: 2
+
+# Dependabot opens PRs against the integration branch, never straight to main.
+# Route: dependabot/* -> dev, which the worker accepts like a fix branch.
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    target-branch: "dev"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 3

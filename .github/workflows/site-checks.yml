@@ -13,6 +13,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: site-checks-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   site-checks:
     name: site-checks
