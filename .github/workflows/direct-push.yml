@@ -1,0 +1,30 @@
+name: direct-push
+
+# Surfaces commits that land on a protected branch without a merge commit.
+# GitHub Free cannot block those pushes on private repos; this makes them
+# visible on the commit and in the Actions tab instead of silent.
+
+on:
+  push:
+    branches: [main, dev]
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    name: direct-push-audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - name: Was this a merge commit?
+        run: |
+          parents=$(git rev-list --parents -n 1 "$GITHUB_SHA" | wc -w)
+          if [ "$parents" -lt 3 ]; then
+            echo "::warning::Direct commit on $GITHUB_REF_NAME by $GITHUB_ACTOR - the standard path is a PR from dev."
+          else
+            echo "merge commit on $GITHUB_REF_NAME - consistent with a promotion"
+          fi
