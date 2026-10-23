@@ -1,0 +1,48 @@
+name: site-checks
+
+# Static-site validation for peterchencha.github.io. Every push to main
+# redeploys GitHub Pages, so these checks run on the PR that would cause it.
+
+on:
+  pull_request:
+    branches: [dev, main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  site-checks:
+    name: site-checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Required pages, internal links, no stray build artefacts
+        run: |
+          python3 - <<'PY'
+          import pathlib, re, sys
+          root = pathlib.Path(".")
+          required = ["index.html", "privacy.html", "terms.html"]
+          problems = [f"missing {p}" for p in required if not (root / p).exists()]
+          for page in root.glob("*.html"):
+              html = page.read_text(encoding="utf-8", errors="replace")
+              for href in re.findall(r'href="([^"#?]+)"', html):
+                  if href.startswith(("http://", "https://", "mailto:", "//")):
+                      continue
+                  target = (root / href.lstrip("/"))
+                  if not target.exists():
+                      problems.append(f"{page.name}: broken internal link {href}")
+              if "<title>" not in html:
+                  problems.append(f"{page.name}: no <title>")
+          for junk in (".DS_Store", "Thumbs.db"):
+              if any(root.rglob(junk)):
+                  problems.append(f"stray file: {junk}")
+          if problems:
+              for p in problems:
+                  print(f"::error::{p}")
+              sys.exit(1)
+          print("site checks passed")
+          PY

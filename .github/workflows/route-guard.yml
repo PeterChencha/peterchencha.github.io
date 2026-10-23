@@ -1,0 +1,60 @@
+name: route-guard
+
+# Surfaces branch-model violations. It cannot block a merge on GitHub Free
+# private repositories, so it is a signal for the PR Worker and for review.
+
+on:
+  pull_request:
+    branches: [dev, main]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  route:
+    name: route
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Validate source -> target
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          python3 - <<'PY'
+          import os, sys
+          head = os.environ["HEAD_REF"]
+          base = os.environ["BASE_REF"]
+          prefixes = ("feature/", "fix/", "docs/", "chore/", "refactor/", "test/")
+          if base == "main":
+              ok = head == "dev" or head.startswith("hotfix/")
+              expected = "dev or hotfix/*"
+          elif base == "dev":
+              ok = any(head.startswith(p) and len(head) > len(p) for p in prefixes)
+              expected = ", ".join(p + "*" for p in prefixes)
+          else:
+              ok, expected = False, "dev or main"
+          if not ok:
+              print(f"::error::{head} -> {base} is not an approved route (expected {expected} -> {base})")
+              sys.exit(1)
+          print(f"route ok: {head} -> {base}")
+          PY
+
+  direct-push-audit:
+    name: direct-push-audit
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - name: Flag non-merge commits on protected branches
+        run: |
+          parents=$(git rev-list --parents -n 1 "$GITHUB_SHA" | wc -w)
+          if [ "$parents" -lt 3 ]; then
+            echo "::warning::Direct commit on $GITHUB_REF_NAME by $GITHUB_ACTOR - the standard path is a PR from dev."
+          else
+            echo "merge commit on $GITHUB_REF_NAME: consistent with a promotion"
+          fi
